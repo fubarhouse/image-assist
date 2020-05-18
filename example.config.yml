@@ -1,0 +1,10 @@
+imageset:
+  name: imageset
+  registry: docker.io
+  namespace:
+    source: sourceNamespace
+    destination: destinationNamespace
+  images:
+    - x
+    - y
+    - z
