@@ -13,8 +13,11 @@ import (
 )
 
 type imageset struct {
-	Name      string `yaml:"name"`
-	Registry  string `yaml:"registry"`
+	Name     string `yaml:"name"`
+	Registry struct {
+		Source      string `yaml:"source"`
+		Destination string `yaml:"destination"`
+	} `yaml:"registry"`
 	Namespace struct {
 		Source      string `yaml:"source"`
 		Destination string `yaml:"destination"`
@@ -24,6 +27,8 @@ type imageset struct {
 
 var (
 	targets map[string]imageset
+	registrySource string
+	registryDestination string
 
 	configFile     string
 	dry            bool
@@ -85,13 +90,13 @@ func pull(image, tag string) {
 	for n := range images {
 		for t := range images[n].RepoTags {
 			if images[n].RepoTags[t] == image+":"+tag {
-				fmt.Printf("# docker pull %v/%v:%v\n", "docker.io", image, tag)
+				fmt.Printf("# docker pull %v:%v\n", image, tag)
 				return
 			}
 		}
 	}
 
-	ref := fmt.Sprintf("%v/%v:%v", "docker.io", image, tag)
+	ref := fmt.Sprintf("%v:%v", image, tag)
 	fmt.Println("docker pull", ref)
 	if !dry {
 		if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{}); e != nil {
@@ -118,6 +123,19 @@ func config() {
 	e := yaml.Unmarshal(b, &targets)
 	if e != nil {
 		fmt.Println(e)
+	}
+
+	for target := range targets {
+		if targets[target].Registry.Source == "" {
+			registrySource = "docker.io"
+		} else {
+			registrySource = targets[target].Registry.Source
+		}
+		if targets[target].Registry.Destination == "" {
+			registryDestination = registrySource
+		} else {
+			registryDestination = targets[target].Registry.Destination
+		}
 	}
 }
 
@@ -154,16 +172,16 @@ func main() {
 	// Ensure images exist:
 	Item := targets[imageSet]
 	for _, image := range Item.Images {
-		pull(Item.Namespace.Source+"/"+image, tagSource)
+		pull(registrySource + "/" + Item.Namespace.Source+"/"+image, tagSource)
 	}
 
 	// Retag images:
 	for _, image := range Item.Images {
-		retag(Item.Namespace.Source+"/"+image+":"+tagSource, Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+		retag(registrySource + "/" + Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination + "/" + Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Push images:
 	for _, image := range Item.Images {
-		push(Item.Namespace.Destination + "/" + image + ":" + tagDestiantion)
+		push(registryDestination + "/" + Item.Namespace.Destination + "/" + image + ":" + tagDestiantion)
 	}
 }
