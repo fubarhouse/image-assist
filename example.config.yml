@@ -1,6 +1,8 @@
 imageset:
   name: imageset
-  registry: docker.io
+  registry:
+    source: docker.io
+    destination: quay.io
   namespace:
     source: sourceNamespace
     destination: destinationNamespace
