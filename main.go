@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -110,8 +111,19 @@ func pull(image, tag string) {
 }
 
 // diff will handle container diffs
-// TODO container diffs
-func diff(origin, result string) {}
+// Here, we're using container-diff:
+// https://github.com/GoogleContainerTools/container-diff
+func diff(origin, result string) {
+	binPath, err := exec.LookPath("container-diff")
+	if err != nil || binPath == "" {
+		return
+	}
+	fmt.Printf("%v diff %v %v --type=file\n", binPath, origin, result)
+	output, _ := exec.Command(binPath, "diff", origin, result, "--type=file").Output()
+	// TODO send output to file.
+	fmt.Println(string(output))
+
+}
 
 // config will handle the marshalling the config file
 func config() {
@@ -178,6 +190,11 @@ func main() {
 	// Retag images:
 	for _, image := range Item.Images {
 		retag(registrySource + "/" + Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination + "/" + Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+	}
+
+	// Diff images:
+	for _, image := range Item.Images {
+		diff(registrySource + "/" + Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination + "/" + Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Push images:
