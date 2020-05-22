@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -90,7 +91,7 @@ func pull(image, tag string) {
 	}
 	for n := range images {
 		for t := range images[n].RepoTags {
-			if images[n].RepoTags[t] == image+":"+tag {
+			if strings.Contains(image+":"+tag, images[n].RepoTags[t]){
 				fmt.Printf("# docker pull %v:%v\n", image, tag)
 				return
 			}
@@ -118,10 +119,33 @@ func diff(origin, result string) {
 	if err != nil || binPath == "" {
 		return
 	}
-	fmt.Printf("%v diff %v %v --type=file\n", binPath, origin, result)
-	output, _ := exec.Command(binPath, "diff", origin, result, "--type=file").Output()
-	// TODO send output to file.
-	fmt.Println(string(output))
+	fmt.Printf("%v diff %v %v --type=file", binPath, origin, result)
+
+	if dry {
+		fmt.Printf(" ... not doing.\n")
+		return
+	}
+
+	parts := strings.Split(result, "/")
+	lastPart := parts[len(parts)-1]
+	tagName := strings.Split(lastPart, ":")[0]
+	imageName := strings.Split(lastPart, ":")[1]
+	fileName := fmt.Sprintf("container-diff_%v_%v.txt", imageName, tagName)
+	output, _ := exec.Command(binPath, "diff", result, origin, "--type=file").Output()
+
+	fmt.Printf(" ... done.\n")
+
+	f, err := os.Create(fileName)
+	defer f.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	_, err = f.WriteString(string(output))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 }
 
