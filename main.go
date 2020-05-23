@@ -32,11 +32,13 @@ var (
 	registrySource      string
 	registryDestination string
 
-	configFile     string
-	dry            bool
-	imageSet       string
-	tagSource      string
-	tagDestiantion string
+	configFile           string
+	diffAction           bool
+	dry                  bool
+	imageSet             string
+	namespaceDestination string
+	tagSource            string
+	tagDestiantion       string
 )
 
 // retag will apply a new tag to an existing image reference.
@@ -121,7 +123,7 @@ func diff(origin, result string) {
 	}
 	fmt.Printf("%v diff %v %v --type=file", binPath, origin, result)
 
-	if dry {
+	if dry && !diffAction {
 		fmt.Printf(" ... not doing.\n")
 		return
 	}
@@ -130,8 +132,13 @@ func diff(origin, result string) {
 	lastPart := parts[len(parts)-1]
 	tagName := strings.Split(lastPart, ":")[0]
 	imageName := strings.Split(lastPart, ":")[1]
-	fileName := fmt.Sprintf("container-diff_%v_%v.txt", imageName, tagName)
-	output, _ := exec.Command(binPath, "diff", result, origin, "--type=file").Output()
+	fileName := fmt.Sprintf("container-diff_%v_%v_%v.txt", imageSet, imageName, tagName)
+	output, commandErr := exec.Command(binPath, "diff", result, origin, "--type=file").Output()
+
+	if commandErr != nil {
+		fmt.Printf("%v\n", commandErr.Error())
+		return
+	}
 
 	fmt.Printf(" ... done.\n")
 
@@ -173,6 +180,11 @@ func config() {
 		} else {
 			registryDestination = targets[target].Registry.Destination
 		}
+		if targets[target].Namespace.Destination == "" {
+			namespaceDestination = targets[target].Namespace.Source
+		} else {
+			namespaceDestination = targets[target].Namespace.Destination
+		}
 	}
 }
 
@@ -180,6 +192,7 @@ func config() {
 func main() {
 
 	flag.StringVar(&configFile, "config", "config.yml", "Path to configuration file")
+	flag.BoolVar(&diffAction, "diff", false, "In the cases where dry-run is enabled, also run the diff")
 	flag.BoolVar(&dry, "dry-run", false, "Do not perform any actions, just report the expected actions")
 	flag.StringVar(&imageSet, "set", "", "Run the workload against the specified image-set")
 	flag.StringVar(&tagSource, "source", "", "Source tag to identify or pull before processing")
@@ -214,16 +227,16 @@ func main() {
 
 	// Retag images:
 	for _, image := range Item.Images {
-		retag(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+		retag(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+namespaceDestination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Diff images:
 	for _, image := range Item.Images {
-		diff(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+		diff(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+namespaceDestination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Push images:
 	for _, image := range Item.Images {
-		push(registryDestination + "/" + Item.Namespace.Destination + "/" + image + ":" + tagDestiantion)
+		push(registryDestination + "/" + namespaceDestination + "/" + image + ":" + tagDestiantion)
 	}
 }
