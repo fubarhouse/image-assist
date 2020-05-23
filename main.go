@@ -28,8 +28,8 @@ type imageset struct {
 }
 
 var (
-	targets map[string]imageset
-	registrySource string
+	targets             map[string]imageset
+	registrySource      string
 	registryDestination string
 
 	configFile     string
@@ -91,14 +91,14 @@ func pull(image, tag string) {
 	}
 	for n := range images {
 		for t := range images[n].RepoTags {
-			if strings.Contains(image+":"+tag, images[n].RepoTags[t]){
-				fmt.Printf("# docker pull %v:%v\n", image, tag)
+			if strings.Contains(image+":"+tag, images[n].RepoTags[t]) {
+				fmt.Printf("# docker pull %v/%v:%v\n", registrySource, image, tag)
 				return
 			}
 		}
 	}
 
-	ref := fmt.Sprintf("%v:%v", image, tag)
+	ref := fmt.Sprintf("%v/%v:%v", registrySource, image, tag)
 	fmt.Println("docker pull", ref)
 	if !dry {
 		if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{}); e != nil {
@@ -135,6 +135,7 @@ func diff(origin, result string) {
 
 	fmt.Printf(" ... done.\n")
 
+	os.Remove(fileName)
 	f, err := os.Create(fileName)
 	defer f.Close()
 	if err != nil {
@@ -208,17 +209,17 @@ func main() {
 	// Ensure images exist:
 	Item := targets[imageSet]
 	for _, image := range Item.Images {
-		pull(registrySource + "/" + Item.Namespace.Source+"/"+image, tagSource)
+		pull(Item.Namespace.Source+"/"+image, tagSource)
 	}
 
 	// Retag images:
 	for _, image := range Item.Images {
-		retag(registrySource + "/" + Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination + "/" + Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+		retag(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Diff images:
 	for _, image := range Item.Images {
-		diff(registrySource + "/" + Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination + "/" + Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
+		diff(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+Item.Namespace.Destination+"/"+image+":"+tagDestiantion)
 	}
 
 	// Push images:
