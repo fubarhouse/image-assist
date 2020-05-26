@@ -60,7 +60,7 @@ func retag(origin, result string) {
 	}
 
 	if e := cli.ImageTag(ctx, origin, result); e != nil {
-		fmt.Println(e)
+		fmt.Println("", e)
 		os.Exit(1)
 	}
 }
@@ -80,7 +80,7 @@ func push(result string) {
 	}
 
 	if _, e := cli.ImagePush(ctx, result, types.ImagePushOptions{}); e != nil {
-		fmt.Println(e)
+		fmt.Println("", e)
 		os.Exit(1)
 	}
 }
@@ -116,7 +116,7 @@ func pull(image, tag string) {
 	}
 
 	if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{}); e != nil {
-		fmt.Println(e)
+		fmt.Println("", e)
 		os.Exit(1)
 	}
 }
@@ -144,7 +144,7 @@ func diff(origin, result string) {
 	output, commandErr := exec.Command(binPath, "diff", result, origin, "--type=file").Output()
 
 	if commandErr != nil {
-		fmt.Printf("%v\n", commandErr.Error())
+		fmt.Printf(" %v\n", commandErr.Error())
 		return
 	}
 
