@@ -39,6 +39,8 @@ var (
 	tagSource            string
 	tagDestiantion       string
 
+	exitOnFail bool
+
 	diffAction  bool
 	pullAction  bool
 	pushAction  bool
@@ -61,7 +63,9 @@ func retag(origin, result string) {
 
 	if e := cli.ImageTag(ctx, origin, result); e != nil {
 		fmt.Println("", e)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 }
 
@@ -81,7 +85,9 @@ func push(result string) {
 
 	if _, e := cli.ImagePush(ctx, result, types.ImagePushOptions{}); e != nil {
 		fmt.Println("", e)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 }
 
@@ -90,14 +96,16 @@ func pull(image, tag string) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	cli.NegotiateAPIVersion(ctx)
-	if err != nil {
+	if err != nil && exitOnFail {
 		fmt.Println(err)
 	}
 
 	images, e := cli.ImageList(ctx, types.ImageListOptions{})
 	if e != nil {
 		fmt.Println(e)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 	for n := range images {
 		for t := range images[n].RepoTags {
@@ -117,7 +125,9 @@ func pull(image, tag string) {
 
 	if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{}); e != nil {
 		fmt.Println("", e)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 }
 
@@ -155,12 +165,16 @@ func diff(origin, result string) {
 	defer f.Close()
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 	_, err = f.WriteString(string(output))
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		if exitOnFail {
+			os.Exit(1)
+		}
 	}
 
 }
@@ -204,6 +218,8 @@ func main() {
 	flag.StringVar(&imageSet, "set", "", "Run the workload against the specified image-set")
 	flag.StringVar(&tagSource, "source", "", "Source tag to identify or pull before processing")
 	flag.StringVar(&tagDestiantion, "destination", "", "Destination tag to push to")
+
+	flag.BoolVar(&exitOnFail, "exit-on-fail", false, "Exit on failure of any Docker API call.")
 
 	flag.BoolVar(&diffAction, "diff", false, "In the cases where dry-run is enabled, also run the diff action")
 	flag.BoolVar(&pullAction, "pull", false, "In the cases where dry-run is enabled, also run the pull action")
