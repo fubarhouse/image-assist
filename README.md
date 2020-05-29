@@ -18,8 +18,18 @@ $ go run main.go -h
         Path to configuration file (default "config.yml")
   -destination string
         Destination tag to push to
+  -diff
+        In the cases where dry-run is enabled, also run the diff action
   -dry-run
         Do not perform any actions, just report the expected actions
+  -exit-on-fail
+        Exit on failure of any Docker API call.
+  -pull
+        In the cases where dry-run is enabled, also run the pull action
+  -push
+        In the cases where dry-run is enabled, also run the push action
+  -retag
+        In the cases where dry-run is enabled, also run the retag action
   -set string
         Run the workload against the specified image-set
   -source string
