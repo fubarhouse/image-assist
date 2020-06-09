@@ -1,11 +1,16 @@
 imageset:
   name: imageset
-  registry:
-    source: docker.io
-    destination: quay.io
-  namespace:
-    source: sourceNamespace
-    destination: destinationNamespace
+  read: source
+  write: destination
+  registries:
+    source:
+      url: docker.io
+      auth: xyz
+      namespace: sourceNamespace
+    destination:
+      url: quay.io
+      auth: xyz
+      namespace: destinationNamespace
   images:
     - x
     - y

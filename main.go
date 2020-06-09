@@ -15,27 +15,25 @@ import (
 )
 
 type imageset struct {
-	Name     string `yaml:"name"`
-	Registry struct {
-		Source      string `yaml:"source"`
-		Destination string `yaml:"destination"`
-	} `yaml:"registry"`
-	Namespace struct {
-		Source      string `yaml:"source"`
-		Destination string `yaml:"destination"`
-	} `yaml:"namespace"`
-	Images []string `yaml:"images"`
+	Name       string              `yaml:"name"`
+	Read       string              `yaml:"read"`
+	Write      string              `yaml:"write"`
+	Registries map[string]Registry `yaml:"registries"`
+	Images     []string            `yaml:"images"`
+}
+
+type Registry struct {
+	URL       string `yaml:"url"`
+	Auth      string `yaml:"auth"`
+	Namespace string `yaml:"namespace"`
 }
 
 var (
-	targets             map[string]imageset
-	registrySource      string
-	registryDestination string
+	targets                 map[string]imageset
 
 	configFile           string
 	dry                  bool
 	imageSet             string
-	namespaceDestination string
 	tagSource            string
 	tagDestiantion       string
 
@@ -48,13 +46,17 @@ var (
 )
 
 // retag will apply a new tag to an existing image reference.
-func retag(origin, result string) {
+//func retag(origin, result string) {
+func retag(registryOne, registryTwo string, TagOne, TagTwo, Image string) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	cli.NegotiateAPIVersion(ctx)
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	origin := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].URL,targets[imageSet].Registries[targets[imageSet].Read].Namespace, TagOne, Image)
+	result := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, TagTwo, Image)
 
 	fmt.Println("docker tag", origin, result)
 	if dry && !retagAction {
@@ -70,7 +72,7 @@ func retag(origin, result string) {
 }
 
 // push will push an image to the destination location.
-func push(result string) {
+func push(Registry Registry, Image, Tag string) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	cli.NegotiateAPIVersion(ctx)
@@ -78,12 +80,16 @@ func push(result string) {
 		fmt.Println(err)
 	}
 
-	fmt.Println("docker push", result)
+	ref := fmt.Sprintf("%v/%v/%v:%v", Registry.URL, Registry.Namespace, Image, Tag)
+
+	fmt.Println("docker push", ref)
 	if dry && !pushAction {
 		return
 	}
 
-	if _, e := cli.ImagePush(ctx, result, types.ImagePushOptions{}); e != nil {
+	if _, e := cli.ImagePush(ctx, ref, types.ImagePushOptions{
+		RegistryAuth: Registry.Auth,
+	}); e != nil {
 		fmt.Println("", e)
 		if exitOnFail {
 			os.Exit(1)
@@ -92,7 +98,7 @@ func push(result string) {
 }
 
 // pull will pull a given image into the local registry.
-func pull(image, tag string) {
+func pull(r Registry, image, tag string) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	cli.NegotiateAPIVersion(ctx)
@@ -107,23 +113,26 @@ func pull(image, tag string) {
 			os.Exit(1)
 		}
 	}
+
 	for n := range images {
 		for t := range images[n].RepoTags {
 			if strings.Contains(image+":"+tag, images[n].RepoTags[t]) {
-				fmt.Printf("# docker pull %v/%v:%v\n", registrySource, image, tag)
+				fmt.Printf("# docker pull %v/%v/%v:%v\n", r.URL, r.Namespace, image, tag)
 				return
 			}
 		}
 	}
 
-	ref := fmt.Sprintf("%v/%v:%v", registrySource, image, tag)
-	fmt.Println("docker pull", ref)
+	ref := fmt.Sprintf("%v/%v/%v:%v\n", r.URL, r.Namespace, image, tag)
+	fmt.Print("docker pull ", ref)
 
 	if dry && !pullAction {
 		return
 	}
 
-	if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{}); e != nil {
+	if _, e := cli.ImagePull(ctx, ref, types.ImagePullOptions{
+		RegistryAuth: r.Auth,
+	}); e != nil {
 		fmt.Println("", e)
 		if exitOnFail {
 			os.Exit(1)
@@ -134,7 +143,9 @@ func pull(image, tag string) {
 // diff will handle container diffs
 // Here, we're using container-diff:
 // https://github.com/GoogleContainerTools/container-diff
-func diff(origin, result string) {
+func diff(registryOne, registryTwo string, TagOne, TagTwo, Image string) {
+	origin := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].URL, targets[imageSet].Registries[targets[imageSet].Read].Namespace, TagOne, Image)
+	result := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, TagTwo, Image)
 	binPath, err := exec.LookPath("container-diff")
 	if err != nil || binPath == "" {
 		return
@@ -190,24 +201,6 @@ func config() {
 	if e != nil {
 		fmt.Println(e)
 	}
-
-	for target := range targets {
-		if targets[target].Registry.Source == "" {
-			registrySource = "docker.io"
-		} else {
-			registrySource = targets[target].Registry.Source
-		}
-		if targets[target].Registry.Destination == "" {
-			registryDestination = registrySource
-		} else {
-			registryDestination = targets[target].Registry.Destination
-		}
-		if targets[target].Namespace.Destination == "" {
-			namespaceDestination = targets[target].Namespace.Source
-		} else {
-			namespaceDestination = targets[target].Namespace.Destination
-		}
-	}
 }
 
 // main is the entrypoint to this application.
@@ -247,24 +240,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Ensure images exist:
-	Item := targets[imageSet]
-	for _, image := range Item.Images {
-		pull(Item.Namespace.Source+"/"+image, tagSource)
+	// Loop over all the targets:
+	for n, r := range targets[imageSet].Registries {
+		// Ensure images exist:
+		if targets[imageSet].Read == n {
+			for _, image := range targets[imageSet].Images {
+				pull(r, image, tagSource)
+			}
+		}
 	}
 
 	// Retag images:
-	for _, image := range Item.Images {
-		retag(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+namespaceDestination+"/"+image+":"+tagDestiantion)
+	for _, image := range targets[imageSet].Images {
+		retag(targets[imageSet].Read, targets[imageSet].Write, tagSource, tagDestiantion, image)
+		// registrySource+"/"+namespaceSource+"/"+image+":"+tagSource, registryDestination+"/"+namespaceDestination+"/"+image+":"+tagDestiantion
 	}
 
 	// Diff images:
-	for _, image := range Item.Images {
-		diff(registrySource+"/"+Item.Namespace.Source+"/"+image+":"+tagSource, registryDestination+"/"+namespaceDestination+"/"+image+":"+tagDestiantion)
+	for _, image := range targets[imageSet].Images {
+		diff(targets[imageSet].Read, targets[imageSet].Write, tagSource, tagDestiantion, image)
 	}
 
 	// Push images:
-	for _, image := range Item.Images {
-		push(registryDestination + "/" + namespaceDestination + "/" + image + ":" + tagDestiantion)
+	for n, r := range targets[imageSet].Registries {
+		if targets[imageSet].Read == n {
+			for _, image := range targets[imageSet].Images {
+				push(r, image, tagDestiantion)
+			}
+		}
 	}
 }
