@@ -29,13 +29,13 @@ type Registry struct {
 }
 
 var (
-	targets                 map[string]imageset
+	targets map[string]imageset
 
-	configFile           string
-	dry                  bool
-	imageSet             string
-	tagSource            string
-	tagDestiantion       string
+	configFile     string
+	dry            bool
+	imageSet       string
+	tagSource      string
+	tagDestiantion string
 
 	exitOnFail bool
 
@@ -55,8 +55,8 @@ func retag(registryOne, registryTwo string, TagOne, TagTwo, Image string) {
 		fmt.Println(err)
 	}
 
-	origin := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].URL,targets[imageSet].Registries[targets[imageSet].Read].Namespace, TagOne, Image)
-	result := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, TagTwo, Image)
+	origin := fmt.Sprintf("%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].Namespace, Image, TagOne)
+	result := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, Image, TagTwo)
 
 	fmt.Println("docker tag", origin, result)
 	if dry && !retagAction {
@@ -114,17 +114,18 @@ func pull(r Registry, image, tag string) {
 		}
 	}
 
+	ref := fmt.Sprintf("%v/%v/%v:%v", r.URL, r.Namespace, image, tag)
+
 	for n := range images {
 		for t := range images[n].RepoTags {
 			if strings.Contains(image+":"+tag, images[n].RepoTags[t]) {
-				fmt.Printf("# docker pull %v/%v/%v:%v\n", r.URL, r.Namespace, image, tag)
+				fmt.Printf("# docker pull %v\n", ref)
 				return
 			}
 		}
 	}
 
-	ref := fmt.Sprintf("%v/%v/%v:%v\n", r.URL, r.Namespace, image, tag)
-	fmt.Print("docker pull ", ref)
+	fmt.Printf("docker pull %v\n", ref)
 
 	if dry && !pullAction {
 		return
@@ -144,8 +145,8 @@ func pull(r Registry, image, tag string) {
 // Here, we're using container-diff:
 // https://github.com/GoogleContainerTools/container-diff
 func diff(registryOne, registryTwo string, TagOne, TagTwo, Image string) {
-	origin := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].URL, targets[imageSet].Registries[targets[imageSet].Read].Namespace, TagOne, Image)
-	result := fmt.Sprintf("%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, TagTwo, Image)
+	origin := fmt.Sprintf("remote://%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Read].URL, targets[imageSet].Registries[targets[imageSet].Read].Namespace, Image, TagOne)
+	result := fmt.Sprintf("daemon://%v/%v/%v:%v", targets[imageSet].Registries[targets[imageSet].Write].URL, targets[imageSet].Registries[targets[imageSet].Write].Namespace, Image, TagTwo)
 	binPath, err := exec.LookPath("container-diff")
 	if err != nil || binPath == "" {
 		return
@@ -162,7 +163,7 @@ func diff(registryOne, registryTwo string, TagOne, TagTwo, Image string) {
 	tagName := strings.Split(lastPart, ":")[0]
 	imageName := strings.Split(lastPart, ":")[1]
 	fileName := fmt.Sprintf("container-diff_%v_%v_%v.txt", imageSet, imageName, tagName)
-	output, commandErr := exec.Command(binPath, "diff", result, origin, "--type=file").Output()
+	output, commandErr := exec.Command(binPath, "diff", origin, result, "--type=file").Output()
 
 	if commandErr != nil {
 		fmt.Printf(" %v\n", commandErr.Error())
